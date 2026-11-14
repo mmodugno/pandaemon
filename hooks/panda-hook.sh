@@ -11,8 +11,20 @@ TOKEN_FILE="$HOME/.panda/token"
 [ -f "$TOKEN_FILE" ] || exit 0
 TOKEN="$(cat "$TOKEN_FILE")"
 
-TEAM=""
-[ -f .claude-tab ] && TEAM="$(tr -d '[:space:]' < .claude-tab)"
+# PANDA_TEAM (variable de entorno) fuerza el equipo, por ejemplo:
+#   PANDA_TEAM=team1 claude
+# Si no está, busca .claude-tab en la carpeta actual y en las de arriba.
+# Así un solo archivo en la carpeta del equipo marca a todos sus proyectos.
+TEAM="${PANDA_TEAM:-}"
+DIR_SEARCH="$PWD"
+[ -n "$TEAM" ] && DIR_SEARCH=""
+while [ -n "$DIR_SEARCH" ] && [ "$DIR_SEARCH" != "/" ]; do
+  if [ -f "$DIR_SEARCH/.claude-tab" ]; then
+    TEAM="$(tr -d '[:space:]' < "$DIR_SEARCH/.claude-tab")"
+    break
+  fi
+  DIR_SEARCH="$(dirname "$DIR_SEARCH")"
+done
 [ -z "$TEAM" ] && exit 0
 
 # La clave del equipo solo puede tener letras, numeros, guion y guion bajo
@@ -24,13 +36,23 @@ SESSION="$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)"
 MESSAGE="$(echo "$INPUT" | jq -r '.message // empty' 2>/dev/null)"
 [ -z "$SESSION" ] && SESSION="$PPID"
 
-TTY="$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ')"
-[ -n "$TTY" ] && TTY="/dev/$TTY"
+# El hook corre sin terminal propia: busca la de Claude Code subiendo
+# por los procesos padre hasta encontrar uno con tty (ttysNNN).
+TTY=""
+PID_SEARCH="$PPID"
+for _ in 1 2 3 4 5 6; do
+  T="$(ps -o tty= -p "$PID_SEARCH" 2>/dev/null | tr -d ' ')"
+  case "$T" in
+    ttys[0-9]*) TTY="/dev/$T"; break ;;
+  esac
+  PID_SEARCH="$(ps -o ppid= -p "$PID_SEARCH" 2>/dev/null | tr -d ' ')"
+  [ -z "$PID_SEARCH" ] || [ "$PID_SEARCH" -le 1 ] && break
+done
 
 # Pestaña: título, color y campanita según el evento
 case "$TYPE" in
-  done|ask) "$HOOK_DIR/../bin/panda-tab" "$TEAM" "🔔" 2>/dev/null ;;
-  *)        "$HOOK_DIR/../bin/panda-tab" "$TEAM" 2>/dev/null ;;
+  done|ask) PANDA_TTY="$TTY" "$HOOK_DIR/../bin/panda-tab" "$TEAM" "🔔" 2>/dev/null ;;
+  *)        PANDA_TTY="$TTY" "$HOOK_DIR/../bin/panda-tab" "$TEAM" 2>/dev/null ;;
 esac
 
 PAYLOAD="$(jq -n \
