@@ -1,17 +1,19 @@
 # Pandaemon 🐼
 
-A desktop panda mascot that keeps an eye on your Claude Code sessions.
+A tiny desktop panda that keeps an eye on your Claude Code sessions.
 
-- Changes its face when a session finishes or needs you.
-- Counts how many sessions are waiting for you, per team or project.
-- One click jumps to the matching iTerm2 tab.
-- Paints every iTerm2 tab with its team's title and color, so you never lose track of six terminals.
+- **Reacts to what Claude is doing:** sips coffee while it works, cheers when a session finishes, looks curious when it needs you, gets worried if you leave it waiting, and falls asleep when nothing happens.
+- **Session panel:** click the panda to see every session with its team color, project, status and how long it has been in that state. Click a row to jump to that iTerm2 tab.
+- **Team counters:** colored chips show how many sessions are waiting for you, per team.
+- **Tab titles and colors:** every iTerm2 tab gets its team's title and color, so you never lose track of six terminals.
+- **Polished details:** the eyes follow your cursor across the whole screen, it blinks, wakes up with a stretch, remembers where you left it, and never steals focus from your terminal.
+- **Menu bar icon:** mute notifications, hide the panda or quit.
 
 ## What works where
 
 | Part | macOS + iTerm2 | Windows / Linux |
 | --- | --- | --- |
-| The panda and its faces | Yes | Yes |
+| The panda, panel and animations | Yes | Yes |
 | Demo with `npm run demo` | Yes | Yes |
 | Claude Code hooks | Yes | No |
 | Tab title and color | Yes (iTerm2) | No |
@@ -34,7 +36,7 @@ The installer downloads dependencies, generates a secret token in `~/.panda/toke
 
 ## Configure your teams
 
-Everything lives in `teams.json`. Each team has a key, a name, a short name, a color and an emoji:
+Teams live in `teams.json`. Each one has a key, a name, a short name, a color and an emoji:
 
 ```json
 "team1": { "name": "Equipo 1", "short": "E1", "color": "#dc2828", "emoji": "🔴" }
@@ -42,13 +44,25 @@ Everything lives in `teams.json`. Each team has a key, a name, a short name, a c
 
 You can delete, add or rename teams. Restart Pandaemon after editing the file.
 
+## Settings
+
+`pandaemon.config.json`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `style` | `"classic"` | `"classic"` for dark patches, `"soft"` for soft gray patches |
+| `sleepMinutes` | `10` | Minutes without activity before the panda falls asleep |
+| `escalateMinutes` | `5` | Minutes a session can wait for you before the panda gets worried |
+
 ## Usage
 
 1. In the root of each project, create a `.claude-tab` file containing the team key, for example `team1`.
 2. Start Pandaemon with `npm start`.
 3. Open Claude Code as usual.
 
-The first time you click to jump to a tab, macOS asks for automation permission to control iTerm2. Accept it.
+The first time you jump to a tab, macOS asks for automation permission to control iTerm2. Accept it.
+
+Drag the panda by its body to move it. Click it to open or close the session panel. Use the menu bar icon to mute notifications or quit.
 
 ## See the panda without hooks
 
@@ -58,7 +72,7 @@ With Pandaemon running:
 npm run demo
 ```
 
-The script sends fake events so you can watch the faces change. In the panda window, keys 1 to 5 also show each face. It needs a token in `~/.panda/token` (on macOS `install.sh` creates it).
+The script sends fake events so you can watch every state, and the panel fills with demo sessions. It needs a token in `~/.panda/token` (on macOS `install.sh` creates it).
 
 To create it by hand on Windows or Linux:
 
