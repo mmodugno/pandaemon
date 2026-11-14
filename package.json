@@ -1,0 +1,14 @@
+{
+  "name": "pandaemon",
+  "version": "0.1.0",
+  "description": "Mascota panda de escritorio que te avisa lo que pasa en tus sesiones de Claude Code",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "demo": "node scripts/demo.js"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "license": "MIT"
+}
