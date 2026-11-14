@@ -1,5 +1,6 @@
 {
   "style": "classic",
   "sleepMinutes": 10,
-  "escalateMinutes": 5
+  "escalateMinutes": 5,
+  "followCursor": true
 }

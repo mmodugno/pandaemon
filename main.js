@@ -35,10 +35,11 @@ try {
 
 // Ajustes en pandaemon.config.json, validados
 function loadConfig() {
-  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5 };
+  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5, followCursor: true };
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'pandaemon.config.json'), 'utf8'));
     if (raw.style === 'soft' || raw.style === 'classic') cfg.style = raw.style;
+    if (typeof raw.followCursor === 'boolean') cfg.followCursor = raw.followCursor;
     if (Number.isFinite(raw.sleepMinutes)) cfg.sleepMinutes = Math.min(240, Math.max(1, raw.sleepMinutes));
     if (Number.isFinite(raw.escalateMinutes)) cfg.escalateMinutes = Math.min(120, Math.max(1, raw.escalateMinutes));
   } catch (e) { /* se usan los valores por defecto */ }
@@ -63,6 +64,7 @@ const sessions = new Map();
 let win = null;
 let tray = null;
 let muted = false;
+let followCursor = CONFIG.followCursor;
 
 /* ---------- Ventana ---------- */
 
@@ -281,13 +283,24 @@ function startServer() {
 
 /* ---------- Barra de menú / bandeja ---------- */
 
-function buildTrayMenu() {
-  if (!tray) return;
+function menuTemplate() {
   const visible = !!win && win.isVisible();
-  const menu = Menu.buildFromTemplate([
+  return [
     {
       label: visible ? 'Ocultar el panda' : 'Mostrar el panda',
       click: () => { if (win) { win.isVisible() ? win.hide() : win.showInactive(); buildTrayMenu(); } },
+    },
+    {
+      label: 'Los ojos siguen el cursor',
+      type: 'checkbox',
+      checked: followCursor,
+      click: (item) => {
+        followCursor = item.checked;
+        // Al apagarlo los ojos vuelven al centro
+        if (!followCursor && win && !win.isDestroyed()) win.webContents.send('panda-cursor', null);
+        lastCursor = '';
+        buildTrayMenu();
+      },
     },
     {
       label: 'Silenciar notificaciones',
@@ -299,8 +312,12 @@ function buildTrayMenu() {
     { label: `Sesiones activas: ${sessions.size}`, enabled: false },
     { type: 'separator' },
     { label: 'Salir de Pandaemon', click: () => app.quit() },
-  ]);
-  tray.setContextMenu(menu);
+  ];
+}
+
+function buildTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
 }
 
 function createTray() {
@@ -318,6 +335,11 @@ function createTray() {
 /* ---------- IPC ---------- */
 
 ipcMain.handle('get-state', () => ({ teams: TEAMS, sessions: list(), muted, config: CONFIG }));
+
+// Clic derecho sobre el panda: mismo menú que la bandeja
+ipcMain.on('context-menu', () => {
+  if (win && !win.isDestroyed()) Menu.buildFromTemplate(menuTemplate()).popup({ window: win });
+});
 
 ipcMain.on('focus-team', (_e, key) => {
   if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key);
@@ -353,7 +375,7 @@ ipcMain.on('drag-end', () => { if (dragOrigin) { dragOrigin = null; savePos(); }
 let lastCursor = '';
 function trackCursor() {
   setInterval(() => {
-    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    if (!followCursor || !win || win.isDestroyed() || !win.isVisible()) return;
     const p = screen.getCursorScreenPoint();
     const b = win.getBounds();
     const rel = { x: p.x - b.x, y: p.y - b.y };
