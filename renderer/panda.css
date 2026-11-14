@@ -1,0 +1,104 @@
+html, body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100vh;
+}
+
+/* Barrita fina arriba para arrastrar la ventana */
+.drag-handle {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 18px;
+  -webkit-app-region: drag;
+}
+
+/* El panda se puede cliquear: salta a la sesión que te necesita */
+.panda { -webkit-app-region: no-drag; cursor: pointer; }
+
+/* Globito de texto */
+.bubble {
+  background: #fff;
+  color: #222;
+  border: 3px solid var(--team, #222);
+  border-radius: 14px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 260px;
+  text-align: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,.2);
+  transition: opacity .25s ease, transform .25s ease;
+}
+.bubble.hidden { opacity: 0; transform: translateY(6px); }
+
+/* Contadores por equipo */
+.counters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  -webkit-app-region: no-drag;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  border: 2px solid var(--team);
+  border-radius: 999px;
+  padding: 2px 9px 2px 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #222;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.chip .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--team);
+}
+.chip.ask { animation: pulse .8s ease-in-out infinite; }
+
+/* Estados */
+.panda.calm      { animation: breathe 3.5s ease-in-out infinite; }
+.panda.happy     { animation: bounce .5s ease-in-out 4; }
+.panda.curious   { animation: tilt 1.2s ease-in-out infinite; }
+.panda.sleeping  { animation: breathe 6s ease-in-out infinite; opacity: .85; }
+.panda.worried   { animation: shake .35s ease-in-out 5; }
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03); }
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-18px); }
+}
+@keyframes tilt {
+  0%, 100% { transform: rotate(-4deg); }
+  50%      { transform: rotate(4deg); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-6px); }
+  75%      { transform: translateX(6px); }
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}

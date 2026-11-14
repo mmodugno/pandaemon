@@ -1,0 +1,7 @@
+{
+  "team1": { "name": "Equipo 1", "short": "E1", "color": "#dc2828", "emoji": "🔴" },
+  "team2": { "name": "Equipo 2", "short": "E2", "color": "#2864dc", "emoji": "🔵" },
+  "team3": { "name": "Equipo 3", "short": "E3", "color": "#8c3cc8", "emoji": "🟣" },
+  "team4": { "name": "Equipo 4", "short": "E4", "color": "#28aa50", "emoji": "🟢" },
+  "team5": { "name": "Equipo 5", "short": "E5", "color": "#f08c1e", "emoji": "🟠" }
+}
