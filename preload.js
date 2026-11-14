@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('panda', {
   getState: () => ipcRenderer.invoke('get-state'),
   onState: (cb) => ipcRenderer.on('panda-state', (_e, data) => cb(data)),
+  contextMenu: () => ipcRenderer.send('context-menu'),
   onCursor: (cb) => ipcRenderer.on('panda-cursor', (_e, data) => cb(data)),
   focusTeam: (team) => ipcRenderer.send('focus-team', team),
   focusSession: (id) => ipcRenderer.send('focus-session', id),

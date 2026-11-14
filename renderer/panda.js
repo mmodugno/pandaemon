@@ -157,7 +157,10 @@ function applyEyeOffset() {
   });
 }
 
-function onCursor({ x, y }) {
+function onCursor(pos) {
+  // null = seguimiento apagado: ojos al centro
+  if (!pos) { eyeOffset = { x: 0, y: 0 }; applyEyeOffset(); return; }
+  const { x, y } = pos;
   if (currentState === 'sleeping' || currentState === 'happy') return;
   const r = els.svg.getBoundingClientRect();
   const k = r.width / 160;
@@ -328,6 +331,7 @@ const endDrag = () => {
 };
 els.panda.addEventListener('pointerup', endDrag);
 els.panda.addEventListener('pointercancel', endDrag);
+els.panda.addEventListener('contextmenu', (e) => { e.preventDefault(); if (bridge) bridge.contextMenu(); });
 els.panda.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(); }
   if (e.key === 'Escape') closePanel();

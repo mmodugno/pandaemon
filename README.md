@@ -51,6 +51,7 @@ You can delete, add or rename teams. Restart Pandaemon after editing the file.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `style` | `"classic"` | `"classic"` for dark patches, `"soft"` for soft gray patches |
+| `followCursor` | `true` | The panda's eyes follow the mouse. Can also be toggled at runtime from the tray menu or by right-clicking the panda |
 | `sleepMinutes` | `10` | Minutes without activity before the panda falls asleep |
 | `escalateMinutes` | `5` | Minutes a session can wait for you before the panda gets worried |
 
