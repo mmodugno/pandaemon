@@ -57,7 +57,7 @@ You can delete, add or rename teams. Restart Pandaemon after editing the file.
 
 ## Usage
 
-1. In the root of each project, create a `.claude-tab` file containing the team key, for example `team1`.
+1. Create a `.claude-tab` file containing the team key, for example `team1`. Put it in a project's root, or in a parent folder to mark every project inside it. The closest file wins.
 2. Start Pandaemon with `npm start`.
 3. Open Claude Code as usual.
 

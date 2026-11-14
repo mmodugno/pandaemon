@@ -25,7 +25,17 @@ R=$((16#${HEX:0:2})); G=$((16#${HEX:2:2})); B=$((16#${HEX:4:2}))
 
 TITLE="$EMOJI $NAME $2"
 
-printf '\033]1;%s\007' "$TITLE" > /dev/tty
-printf '\033]6;1;bg;red;brightness;%d\a'   "$R" > /dev/tty
-printf '\033]6;1;bg;green;brightness;%d\a' "$G" > /dev/tty
-printf '\033]6;1;bg;blue;brightness;%d\a'  "$B" > /dev/tty
+# Desde un hook no hay /dev/tty: PANDA_TTY trae la terminal de Claude Code.
+# Solo se acepta /dev/ttysNNN, que exista y que se pueda escribir.
+OUT=/dev/tty
+case "$PANDA_TTY" in
+  /dev/ttys[0-9]|/dev/ttys[0-9][0-9]|/dev/ttys[0-9][0-9][0-9]|/dev/ttys[0-9][0-9][0-9][0-9])
+    [ -c "$PANDA_TTY" ] && [ -w "$PANDA_TTY" ] && OUT="$PANDA_TTY" ;;
+esac
+
+{
+  printf '\033]1;%s\007' "$TITLE"
+  printf '\033]6;1;bg;red;brightness;%d\a'   "$R"
+  printf '\033]6;1;bg;green;brightness;%d\a' "$G"
+  printf '\033]6;1;bg;blue;brightness;%d\a'  "$B"
+} > "$OUT"
