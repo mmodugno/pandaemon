@@ -1,0 +1,5 @@
+{
+  "style": "classic",
+  "sleepMinutes": 10,
+  "escalateMinutes": 5
+}
