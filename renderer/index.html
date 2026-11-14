@@ -5,41 +5,67 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
   <link rel="stylesheet" href="panda.css" />
 </head>
-<body>
-  <div class="drag-handle"></div>
+<body data-style="classic">
+  <div id="stack" class="stack">
 
-  <div id="bubble" class="bubble hidden"></div>
-  <div id="counters" class="counters"></div>
+    <!-- Panel de sesiones -->
+    <section id="panel" class="panel" hidden aria-label="Sesiones de Claude Code">
+      <header class="panel-head">
+        <span class="panel-title">Sesiones</span>
+        <span id="panelMeta" class="panel-meta"></span>
+      </header>
+      <div id="rows" class="rows"></div>
+    </section>
 
-  <div id="panda" class="panda calm">
-    <svg viewBox="0 0 200 200" width="180" height="180">
-      <!-- Orejas -->
-      <circle cx="50"  cy="48" r="22" fill="#222" />
-      <circle cx="150" cy="48" r="22" fill="#222" />
+    <div id="counters" class="counters"></div>
+    <div id="bubble" class="bubble hidden" role="status"><span id="bubbleText"></span></div>
 
-      <!-- Cara -->
-      <ellipse cx="100" cy="105" rx="72" ry="66" fill="#fff" stroke="#222" stroke-width="3" />
+    <div id="panda" class="panda calm" role="button" tabindex="0" aria-label="Pandaemon">
+      <svg id="pandaSvg" viewBox="0 0 160 160" width="120" height="120" aria-hidden="true">
+        <defs>
+          <radialGradient id="eyeG" cx="38%" cy="32%" r="75%">
+            <stop class="eye-hi" offset="0" />
+            <stop class="eye-lo" offset="1" />
+          </radialGradient>
+        </defs>
 
-      <!-- Manchas de los ojos -->
-      <ellipse cx="72"  cy="98" rx="17" ry="22" fill="#222" transform="rotate(20 72 98)" />
-      <ellipse cx="128" cy="98" rx="17" ry="22" fill="#222" transform="rotate(-20 128 98)" />
+        <ellipse cx="80" cy="152" rx="46" ry="6" class="ground" />
 
-      <!-- Ojos (cada estado muestra el suyo) -->
-      <g id="eyes"></g>
+        <!-- Cuerpo chiquito -->
+        <ellipse cx="80" cy="127" rx="31" ry="25" class="white out" />
+        <ellipse cx="80" cy="132" rx="19" ry="14" class="belly" />
+        <ellipse cx="55"  cy="147" rx="15" ry="9.5" class="patch out" />
+        <ellipse cx="105" cy="147" rx="15" ry="9.5" class="patch out" />
+        <ellipse cx="53"  cy="123" rx="8.5" ry="14" class="patch out" transform="rotate(24 53 123)" />
+        <ellipse cx="107" cy="123" rx="8.5" ry="14" class="patch out" transform="rotate(-24 107 123)" />
 
-      <!-- Nariz -->
-      <ellipse cx="100" cy="121" rx="9" ry="6" fill="#222" />
+        <!-- Orejas -->
+        <circle cx="36"  cy="38" r="16" class="patch out" />
+        <circle cx="124" cy="38" r="16" class="patch out" />
+        <circle cx="36"  cy="40" r="7" class="earin" />
+        <circle cx="124" cy="40" r="7" class="earin" />
 
-      <!-- Boca (cada estado muestra la suya) -->
-      <g id="mouth"></g>
+        <!-- Cabeza -->
+        <ellipse cx="80" cy="80" rx="58" ry="50" class="rim out" />
+        <ellipse cx="78" cy="76" rx="54" ry="45" class="white" />
 
-      <!-- Mejillas -->
-      <circle id="blushL" cx="58"  cy="126" r="8" fill="#ff9aa8" opacity="0" />
-      <circle id="blushR" cx="142" cy="126" r="8" fill="#ff9aa8" opacity="0" />
+        <!-- Manchas y mejillas -->
+        <ellipse cx="53"  cy="83" rx="14.5" ry="18" class="patch" transform="rotate(24 53 83)" />
+        <ellipse cx="107" cy="83" rx="14.5" ry="18" class="patch" transform="rotate(-24 107 83)" />
+        <circle id="blushL" cx="37"  cy="101" r="7.5" class="blush" />
+        <circle id="blushR" cx="123" cy="101" r="7.5" class="blush" />
 
-      <!-- Extras: zzz, gota de sudor, signo de pregunta -->
-      <g id="extra"></g>
-    </svg>
+        <g id="eyes"></g>
+
+        <!-- Nariz -->
+        <path d="M72.5 95.5 Q80 91.5 87.5 95.5 Q86 102 80 103.2 Q74 102 72.5 95.5 Z" class="ink" />
+        <ellipse cx="78" cy="94.8" rx="2.4" ry="1.1" class="nose-shine" />
+
+        <g id="mouth"></g>
+        <g id="extra"></g>
+        <g id="prop"></g>
+      </svg>
+    </div>
   </div>
 
   <script src="panda.js"></script>

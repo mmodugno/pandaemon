@@ -1,8 +1,8 @@
-// Demo: le manda eventos falsos a Pandaemon para ver todas las caritas.
-// Funciona en macOS, Linux y Windows. Primero hay que tener Pandaemon corriendo
-// (npm start) y un token en ~/.panda/token.
+// Demo: sends fake events to Pandaemon so you can watch every state.
+// Works on macOS, Linux and Windows. Start Pandaemon first (npm start) and
+// make sure a token exists in ~/.panda/token.
 //
-// Uso: npm run demo
+// Usage: npm run demo
 
 const http = require('http');
 const fs = require('fs');
@@ -16,9 +16,8 @@ let token;
 try {
   token = fs.readFileSync(tokenPath, 'utf8').trim();
 } catch (e) {
-  console.error(`No encuentro el token en ${tokenPath}.`);
-  console.error('Crealo con: node -e "require(\'fs\').mkdirSync(require(\'os\').homedir()+\'/.panda\',{recursive:true});require(\'fs\').writeFileSync(require(\'os\').homedir()+\'/.panda/token\',require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-  console.error('y reinicia Pandaemon.');
+  console.error(`Token not found at ${tokenPath}.`);
+  console.error('Create it (see README, "See the panda without hooks") and restart Pandaemon.');
   process.exit(1);
 }
 
@@ -40,7 +39,7 @@ function send(type, team, session, cwd) {
       (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); }
     );
     req.on('error', () => {
-      console.error('No pude conectar. ¿Está corriendo Pandaemon (npm start)?');
+      console.error('Could not connect. Is Pandaemon running (npm start)?');
       process.exit(1);
     });
     req.end(body);
@@ -48,31 +47,23 @@ function send(type, team, session, cwd) {
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const step = async (text, ms, ...args) => { console.log(text); await send(...args); await wait(ms); };
 
 (async () => {
-  console.log('Equipo 1 arranca una sesión...');
-  await send('start', 'team1', 'demo-1', '/proyectos/api');
-  await wait(2500);
+  console.log('Tip: click the panda to open the session panel while the demo runs.\n');
 
-  console.log('Equipo 2 está trabajando...');
-  await send('working', 'team2', 'demo-2', '/proyectos/web');
-  await wait(2500);
+  await step('Team 1 starts a session in "checkout-api"...', 2500, 'start', 'team1', 'demo-1', '/work/checkout-api');
+  await step('Team 2 starts a session in "mobile-app"...', 2500, 'start', 'team2', 'demo-2', '/work/mobile-app');
+  await step('Both start working (coffee time)...', 6000, 'working', 'team1', 'demo-1', '/work/checkout-api');
+  await send('working', 'team2', 'demo-2', '/work/mobile-app');
+  await wait(1000);
+  await step('Team 1 finishes (happy)...', 6000, 'done', 'team1', 'demo-1', '/work/checkout-api');
+  await step('Team 3 needs you (curious)...', 7000, 'ask', 'team3', 'demo-3', '/work/docs-site');
+  await step('Team 2 finishes...', 6000, 'done', 'team2', 'demo-2', '/work/mobile-app');
 
-  console.log('Equipo 1 terminó (carita contenta)...');
-  await send('done', 'team1', 'demo-1', '/proyectos/api');
-  await wait(5000);
-
-  console.log('Equipo 3 te necesita (carita curiosa)...');
-  await send('ask', 'team3', 'demo-3', '/proyectos/docs');
-  await wait(5000);
-
-  console.log('Equipo 2 terminó...');
-  await send('done', 'team2', 'demo-2', '/proyectos/web');
-  await wait(5000);
-
-  console.log('Cerrando sesiones de la demo.');
-  for (const s of ['demo-1', 'demo-2', 'demo-3']) {
-    await send('end', 'team1', s, '');
+  console.log('Cleaning up the demo sessions.');
+  for (const [team, id] of [['team1', 'demo-1'], ['team2', 'demo-2'], ['team3', 'demo-3']]) {
+    await send('end', team, id, '');
   }
-  console.log('Listo.');
+  console.log('Done. The panda falls asleep after a while without activity.');
 })();

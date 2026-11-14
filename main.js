@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Notification, Tray, Menu, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const http = require('http');
 const fs = require('fs');
@@ -8,11 +8,16 @@ const crypto = require('crypto');
 
 const PORT = 47800;
 const MAX_SESSIONS = 200;
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // sesiones sin novedades en 8 h se descartan
+const WIN_W = 260;
 const IS_MAC = process.platform === 'darwin';
+
+const PANDA_DIR = path.join(os.homedir(), '.panda');
+const TOKEN_PATH = path.join(PANDA_DIR, 'token');
+const STATE_PATH = path.join(PANDA_DIR, 'state.json');
 
 // Token secreto: lo genera install.sh en ~/.panda/token (permisos 600).
 // Sin el token correcto, el servidor rechaza cualquier evento.
-const TOKEN_PATH = path.join(os.homedir(), '.panda', 'token');
 let TOKEN = '';
 try {
   TOKEN = fs.readFileSync(TOKEN_PATH, 'utf8').trim();
@@ -28,6 +33,19 @@ try {
   console.error('No pude leer teams.json:', e.message);
 }
 
+// Ajustes en pandaemon.config.json, validados
+function loadConfig() {
+  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5 };
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'pandaemon.config.json'), 'utf8'));
+    if (raw.style === 'soft' || raw.style === 'classic') cfg.style = raw.style;
+    if (Number.isFinite(raw.sleepMinutes)) cfg.sleepMinutes = Math.min(240, Math.max(1, raw.sleepMinutes));
+    if (Number.isFinite(raw.escalateMinutes)) cfg.escalateMinutes = Math.min(120, Math.max(1, raw.escalateMinutes));
+  } catch (e) { /* se usan los valores por defecto */ }
+  return cfg;
+}
+const CONFIG = loadConfig();
+
 // Formatos permitidos para cada campo que llega por la red
 const RE_TEAM = /^[A-Za-z0-9_-]{1,32}$/;
 const RE_SESSION = /^[A-Za-z0-9_.:-]{1,80}$/;
@@ -35,23 +53,59 @@ const RE_TTY = /^\/dev\/ttys\d{1,4}$/;
 const TYPES = new Set(['start', 'working', 'done', 'ask', 'end']);
 
 function clean(str, max) {
-  return String(str || '')
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .slice(0, max);
+  return String(str || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max);
+}
+const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+// sessions: id -> { id, team, cwd, folder, status, tty, since, seen }
+const sessions = new Map();
+let win = null;
+let tray = null;
+let muted = false;
+
+/* ---------- Ventana ---------- */
+
+function loadPos() {
+  try {
+    const p = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+    if (Number.isFinite(p.x) && Number.isFinite(p.bottom)) return p;
+  } catch (e) { /* primera vez */ }
+  return null;
 }
 
-// sessions: id de sesión -> { team, cwd, status, tty }
-const sessions = new Map();
-let win;
+function savePos() {
+  if (!win || win.isDestroyed()) return;
+  const b = win.getBounds();
+  try {
+    fs.mkdirSync(PANDA_DIR, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(STATE_PATH, JSON.stringify({ x: b.x, bottom: b.y + b.height }), { mode: 0o600 });
+  } catch (e) { /* no es crítico */ }
+}
+
+// Mantiene la ventana dentro de la pantalla donde está
+function fit(x, bottom, h) {
+  const wa = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(bottom) }).workArea;
+  return {
+    x: Math.round(clamp(x, wa.x, wa.x + wa.width - WIN_W)),
+    y: Math.round(clamp(bottom - h, wa.y, wa.y + wa.height - h)),
+  };
+}
 
 function createWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  const W = 340, H = 320;
+  const H = 200;
+  const wa = screen.getPrimaryDisplay().workArea;
+  const saved = loadPos();
+  const x = saved ? saved.x : wa.x + wa.width - WIN_W - 16;
+  const bottom = saved ? saved.bottom : wa.y + wa.height - 12;
+  const pos = fit(x, bottom, H);
+
   win = new BrowserWindow({
-    width: W, height: H,
-    x: width - W - 20, y: height - H - 20,
+    width: WIN_W, height: H, x: pos.x, y: pos.y,
     transparent: true, frame: false, hasShadow: false,
     resizable: false, alwaysOnTop: true, skipTaskbar: true,
+    focusable: false,          // no le roba el foco a tu terminal
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -66,29 +120,24 @@ function createWindow() {
   // La ventana nunca navega ni abre otras ventanas
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.on('closed', () => { win = null; });
 }
 
-function summary() {
-  const out = {};
-  for (const key of Object.keys(TEAMS)) {
-    out[key] = { waiting: 0, asking: 0, working: 0 };
-  }
-  for (const s of sessions.values()) {
-    const t = out[s.team];
-    if (!t) continue;
-    if (s.status === 'done') t.waiting++;
-    if (s.status === 'ask') t.asking++;
-    if (s.status === 'working') t.working++;
-  }
-  return out;
+/* ---------- Sesiones ---------- */
+
+function list() {
+  return [...sessions.values()].map((s) => ({
+    id: s.id, team: s.team, folder: s.folder, status: s.status, since: s.since,
+  }));
 }
 
-function send(payload) {
-  if (win && !win.isDestroyed()) win.webContents.send('panda-event', payload);
+function pushState(extra = {}) {
+  if (win && !win.isDestroyed()) win.webContents.send('panda-state', { sessions: list(), muted, ...extra });
+  buildTrayMenu();
 }
 
 function notify(title, body, teamKey) {
-  if (!Notification.isSupported()) return;
+  if (muted || !Notification.isSupported()) return;
   const n = new Notification({ title, body, silent: false });
   n.on('click', () => focusTeam(teamKey));
   n.show();
@@ -126,11 +175,8 @@ function focusTty(tty) {
 }
 
 function focusTeam(teamKey) {
-  const list = [...sessions.values()].filter((s) => s.team === teamKey);
-  const pick =
-    list.find((s) => s.status === 'ask') ||
-    list.find((s) => s.status === 'done') ||
-    list[0];
+  const mine = [...sessions.values()].filter((s) => s.team === teamKey);
+  const pick = mine.find((s) => s.status === 'ask') || mine.find((s) => s.status === 'done') || mine[0];
   if (pick) focusTty(pick.tty);
 }
 
@@ -141,46 +187,56 @@ function handleEvent(raw) {
   if (!TYPES.has(raw.type)) return;
   if (typeof raw.team !== 'string' || !RE_TEAM.test(raw.team)) return;
   if (typeof raw.session !== 'string' || !RE_SESSION.test(raw.session)) return;
-  if (!Object.prototype.hasOwnProperty.call(TEAMS, raw.team)) return;
+  if (!has(TEAMS, raw.team)) return;
 
   const team = TEAMS[raw.team];
   const tty = typeof raw.tty === 'string' && RE_TTY.test(raw.tty) ? raw.tty : '';
   const cwd = clean(raw.cwd, 300);
   const message = clean(raw.message, 200);
-  const folder = cwd ? path.basename(cwd) : '';
-  const ev = { type: raw.type, team: raw.team, session: raw.session, tty, cwd, message };
+  const folder = cwd ? clean(path.basename(cwd), 60) : '';
+  const id = raw.session;
 
-  if (ev.type === 'end') {
-    sessions.delete(ev.session);
-    send({ kind: 'summary', summary: summary() });
+  if (raw.type === 'end') {
+    sessions.delete(id);
+    pushState();
     return;
   }
 
   // Tope de sesiones para que nadie llene la memoria
-  if (!sessions.has(ev.session) && sessions.size >= MAX_SESSIONS) return;
+  if (!sessions.has(id) && sessions.size >= MAX_SESSIONS) return;
 
   const statusByType = { start: 'idle', working: 'working', done: 'done', ask: 'ask' };
-  sessions.set(ev.session, {
-    team: ev.team,
-    cwd: ev.cwd,
-    tty: ev.tty || (sessions.get(ev.session) || {}).tty || '',
-    status: statusByType[ev.type],
+  const status = statusByType[raw.type];
+  const prev = sessions.get(id);
+  const now = Date.now();
+
+  sessions.set(id, {
+    id,
+    team: raw.team,
+    cwd,
+    folder: folder || (prev && prev.folder) || '',
+    tty: tty || (prev && prev.tty) || '',
+    status,
+    since: prev && prev.status === status ? prev.since : now,
+    seen: now,
   });
 
-  const base = { kind: 'event', team: ev.team, color: team.color, summary: summary() };
-
-  if (ev.type === 'done') {
-    send({ ...base, state: 'happy', text: `${team.name} terminó · ${folder}` });
-    notify(`${team.name} terminó`, folder, ev.team);
-  } else if (ev.type === 'ask') {
-    send({ ...base, state: 'curious', text: `${team.name} te necesita · ${folder}` });
-    notify(`${team.name} te necesita`, ev.message || folder, ev.team);
-  } else if (ev.type === 'working') {
-    send({ ...base, state: 'calm', text: null });
+  const shown = folder || (prev && prev.folder) || '';
+  const base = { team: raw.team, color: team.color };
+  if (raw.type === 'done') {
+    pushState({ ...base, reaction: 'happy', text: `${team.name} terminó · ${shown}` });
+    notify(`${team.name} terminó`, shown, raw.team);
+  } else if (raw.type === 'ask') {
+    pushState({ ...base, reaction: 'ask', text: `${team.name} te necesita · ${shown}` });
+    notify(`${team.name} te necesita`, message || shown, raw.team);
+  } else if (raw.type === 'working') {
+    pushState({ ...base, reaction: 'working' });
   } else {
-    send({ ...base, state: 'calm', text: `${team.name} arrancó · ${folder}` });
+    pushState({ ...base, reaction: 'start', text: `${team.name} arrancó · ${shown}` });
   }
 }
+
+/* ---------- Servidor local ---------- */
 
 // Comparación del token en tiempo constante
 function tokenOk(header) {
@@ -223,22 +279,107 @@ function startServer() {
   server.listen(PORT, '127.0.0.1');
 }
 
-ipcMain.handle('get-teams', () => TEAMS);
-ipcMain.on('focus-team', (_e, teamKey) => {
-  if (typeof teamKey === 'string' && Object.prototype.hasOwnProperty.call(TEAMS, teamKey)) {
-    focusTeam(teamKey);
+/* ---------- Barra de menú / bandeja ---------- */
+
+function buildTrayMenu() {
+  if (!tray) return;
+  const visible = !!win && win.isVisible();
+  const menu = Menu.buildFromTemplate([
+    {
+      label: visible ? 'Ocultar el panda' : 'Mostrar el panda',
+      click: () => { if (win) { win.isVisible() ? win.hide() : win.showInactive(); buildTrayMenu(); } },
+    },
+    {
+      label: 'Silenciar notificaciones',
+      type: 'checkbox',
+      checked: muted,
+      click: (item) => { muted = item.checked; pushState(); },
+    },
+    { type: 'separator' },
+    { label: `Sesiones activas: ${sessions.size}`, enabled: false },
+    { type: 'separator' },
+    { label: 'Salir de Pandaemon', click: () => app.quit() },
+  ]);
+  tray.setContextMenu(menu);
+}
+
+function createTray() {
+  try {
+    const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'));
+    if (IS_MAC) icon.setTemplateImage(true);
+    tray = new Tray(icon);
+    tray.setToolTip('Pandaemon');
+    buildTrayMenu();
+  } catch (e) {
+    console.error('No pude crear el ícono de la barra de menú:', e.message);
   }
+}
+
+/* ---------- IPC ---------- */
+
+ipcMain.handle('get-state', () => ({ teams: TEAMS, sessions: list(), muted, config: CONFIG }));
+
+ipcMain.on('focus-team', (_e, key) => {
+  if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key);
 });
-ipcMain.on('focus-urgent', () => {
-  const list = [...sessions.values()];
-  const pick = list.find((s) => s.status === 'ask') || list.find((s) => s.status === 'done');
-  if (pick) focusTty(pick.tty);
+ipcMain.on('focus-session', (_e, id) => {
+  const s = typeof id === 'string' ? sessions.get(id) : null;
+  if (s) focusTty(s.tty);
 });
+
+// La ventana se ajusta a su contenido y mantiene el borde inferior fijo
+ipcMain.on('resize', (_e, h) => {
+  if (!win || win.isDestroyed() || !Number.isFinite(h)) return;
+  const height = Math.round(clamp(h, 120, 640));
+  const b = win.getBounds();
+  if (b.height === height) return;
+  const pos = fit(b.x, b.y + b.height, height);
+  win.setBounds({ x: pos.x, y: pos.y, width: WIN_W, height });
+});
+
+// Arrastre desde el cuerpo del panda
+let dragOrigin = null;
+ipcMain.on('drag-start', () => { if (win && !win.isDestroyed()) dragOrigin = win.getBounds(); });
+ipcMain.on('drag-move', (_e, dx, dy) => {
+  if (!dragOrigin || !win || win.isDestroyed() || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+  const pos = fit(dragOrigin.x + dx, dragOrigin.y + dragOrigin.height + dy, dragOrigin.height);
+  win.setBounds({ x: pos.x, y: pos.y, width: WIN_W, height: dragOrigin.height });
+});
+ipcMain.on('drag-end', () => { if (dragOrigin) { dragOrigin = null; savePos(); } });
+
+/* ---------- Arranque ---------- */
+
+// Los ojos del panda siguen al cursor en toda la pantalla
+let lastCursor = '';
+function trackCursor() {
+  setInterval(() => {
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    const p = screen.getCursorScreenPoint();
+    const b = win.getBounds();
+    const rel = { x: p.x - b.x, y: p.y - b.y };
+    const key = `${rel.x},${rel.y}`;
+    if (key === lastCursor) return;
+    lastCursor = key;
+    win.webContents.send('panda-cursor', rel);
+  }, 100);
+}
 
 app.whenReady().then(() => {
   if (IS_MAC) app.dock.hide();
   createWindow();
+  createTray();
   startServer();
+  trackCursor();
+  // Limpieza de sesiones abandonadas (terminal cerrada sin avisar)
+  setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, s] of sessions) {
+      if (now - s.seen > SESSION_TTL_MS) { sessions.delete(id); changed = true; }
+    }
+    if (changed) pushState();
+  }, 60000);
 });
 
+app.on('before-quit', savePos);
 app.on('window-all-closed', () => app.quit());
