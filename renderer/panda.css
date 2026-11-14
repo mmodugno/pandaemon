@@ -70,11 +70,9 @@ html, body {
 .blink { transform-box: fill-box; transform-origin: center; animation: blink 5.2s infinite; }
 .pupil { transition: transform .09s ease-out; }
 
-.panda.calm      { animation: breathe 4.2s ease-in-out infinite; }
-.panda.working   { animation: breathe 5s ease-in-out infinite; }
 .panda.happy     { animation: hop .55s cubic-bezier(.3, 0, .3, 1) 3; }
 .panda.curious   { animation: tilt 2.6s ease-in-out infinite; }
-.panda.sleeping  { animation: breathe 6.8s ease-in-out infinite; opacity: .94; }
+.panda.sleeping  { opacity: .94; }
 .panda.worried   { animation: tremble .3s linear infinite; }
 .panda.wake      { animation: stretch .8s cubic-bezier(.3, 1.4, .5, 1) 1; }
 
@@ -87,7 +85,6 @@ html, body {
 .qmark { transform-box: fill-box; transform-origin: center; animation: bob 1.3s ease-in-out infinite; }
 .drop  { animation: drip 2.2s ease-in infinite; }
 
-@keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 1.03); } }
 @keyframes hop {
   0%, 100% { transform: translateY(0) scale(1, 1); }
   30%      { transform: translateY(0) scale(1.05, .94); }
