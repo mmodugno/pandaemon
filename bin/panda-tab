@@ -1,0 +1,31 @@
+#!/bin/bash
+# Uso: panda-tab <clave-de-equipo> [sufijo]
+# Ejemplo: panda-tab team1 "🔔"
+# Pone el título y el color de la pestaña de iTerm2 según teams.json.
+
+DIR="$(cd "$(dirname "$(readlink "$0" || echo "$0")")" && pwd)"
+CONFIG="$DIR/../teams.json"
+
+[ -f "$CONFIG" ] || { echo "No encuentro teams.json"; exit 1; }
+command -v jq >/dev/null || { echo "Falta jq (brew install jq)"; exit 1; }
+
+NAME="$(jq -r --arg k "$1" '.[$k].name // empty' "$CONFIG")"
+COLOR="$(jq -r --arg k "$1" '.[$k].color // empty' "$CONFIG")"
+EMOJI="$(jq -r --arg k "$1" '.[$k].emoji // empty' "$CONFIG")"
+
+[ -z "$NAME" ] && { echo "Equipo desconocido: $1"; exit 1; }
+
+# El color tiene que ser #RRGGBB
+HEX="${COLOR#\#}"
+case "$HEX" in
+  [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
+  *) echo "Color invalido para $1: $COLOR (usa #RRGGBB)"; exit 1 ;;
+esac
+R=$((16#${HEX:0:2})); G=$((16#${HEX:2:2})); B=$((16#${HEX:4:2}))
+
+TITLE="$EMOJI $NAME $2"
+
+printf '\033]1;%s\007' "$TITLE" > /dev/tty
+printf '\033]6;1;bg;red;brightness;%d\a'   "$R" > /dev/tty
+printf '\033]6;1;bg;green;brightness;%d\a' "$G" > /dev/tty
+printf '\033]6;1;bg;blue;brightness;%d\a'  "$B" > /dev/tty
