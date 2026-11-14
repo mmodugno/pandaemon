@@ -216,15 +216,6 @@ function renderCounters() {
 function renderPanel() {
   els.panelMeta.textContent = (sessions.length ? `${sessions.length} activa${sessions.length === 1 ? '' : 's'}` : '') + (muted ? ' · silenciado' : '');
   els.rows.textContent = '';
-  if (!sessions.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    const b = document.createElement('b');
-    b.textContent = 'Sin sesiones activas.';
-    empty.append(b, document.createTextNode(' Abrí Claude Code en un proyecto que tenga un archivo .claude-tab y aparece acá.'));
-    els.rows.appendChild(empty);
-    return;
-  }
   const sorted = [...sessions].sort((a, b) => (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]) || (a.since - b.since));
   for (const s of sorted) {
     const t = teamOf(s.team);
@@ -267,7 +258,11 @@ function closePanel() {
   els.panel.classList.remove('open');
   setTimeout(() => { if (!panelOpen) els.panel.hidden = true; }, 240);
 }
-const togglePanel = () => (panelOpen ? closePanel() : openPanel());
+// Sin sesiones no hay nada que mostrar: el panda queda solo
+const togglePanel = () => {
+  if (panelOpen) closePanel();
+  else if (sessions.length) openPanel();
+};
 
 /* ---------- Mensajes de la app ---------- */
 
@@ -275,7 +270,8 @@ function onState(msg) {
   sessions = Array.isArray(msg.sessions) ? msg.sessions : [];
   muted = !!msg.muted;
   renderCounters();
-  if (panelOpen) renderPanel();
+  if (panelOpen && !sessions.length) closePanel();
+  else if (panelOpen) renderPanel();
 
   if (msg.reaction) {
     lastActivity = Date.now();
