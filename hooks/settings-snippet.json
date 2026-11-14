@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "RUTA/hooks/panda-hook.sh start" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "RUTA/hooks/panda-hook.sh working" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "RUTA/hooks/panda-hook.sh done" } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "RUTA/hooks/panda-hook.sh ask" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "RUTA/hooks/panda-hook.sh end" } ] }
+    ]
+  }
+}
