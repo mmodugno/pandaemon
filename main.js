@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { createPhone, loadPhoneToken } = require('./phone-server');
 
 const PORT = 47800;
 const MAX_SESSIONS = 200;
@@ -35,11 +36,12 @@ try {
 
 // Ajustes en pandaemon.config.json, validados
 function loadConfig() {
-  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5, followCursor: true };
+  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5, followCursor: true, phoneAutoOpen: true };
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'pandaemon.config.json'), 'utf8'));
     if (raw.style === 'soft' || raw.style === 'classic') cfg.style = raw.style;
     if (typeof raw.followCursor === 'boolean') cfg.followCursor = raw.followCursor;
+    if (typeof raw.phoneAutoOpen === 'boolean') cfg.phoneAutoOpen = raw.phoneAutoOpen;
     if (Number.isFinite(raw.sleepMinutes)) cfg.sleepMinutes = Math.min(240, Math.max(1, raw.sleepMinutes));
     if (Number.isFinite(raw.escalateMinutes)) cfg.escalateMinutes = Math.min(120, Math.max(1, raw.escalateMinutes));
   } catch (e) { /* se usan los valores por defecto */ }
@@ -59,7 +61,9 @@ function clean(str, max) {
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
-// sessions: id -> { id, team, cwd, folder, status, tty, since, seen }
+// sessions: id -> { id, team, cwd, folder, status, tty, since, seen, ignored }
+// ignored: la ocultaste con clic derecho. Vuelve a aparecer cuando le escribís
+// (working) o cuando te pide algo (ask).
 const sessions = new Map();
 let win = null;
 let tray = null;
@@ -129,12 +133,18 @@ function createWindow() {
 
 function list() {
   return [...sessions.values()].map((s) => ({
-    id: s.id, team: s.team, folder: s.folder, status: s.status, since: s.since,
+    id: s.id, team: s.team, folder: s.folder, status: s.status, since: s.since, ignored: !!s.ignored,
   }));
 }
 
+function fullState() {
+  return { teams: TEAMS, sessions: list(), muted, config: CONFIG };
+}
+
 function pushState(extra = {}) {
-  if (win && !win.isDestroyed()) win.webContents.send('panda-state', { sessions: list(), muted, ...extra });
+  const data = { sessions: list(), muted, ...extra };
+  if (win && !win.isDestroyed()) win.webContents.send('panda-state', data);
+  phone.broadcast(data);
   buildTrayMenu();
 }
 
@@ -177,9 +187,14 @@ function focusTty(tty) {
 }
 
 function focusTeam(teamKey) {
-  const mine = [...sessions.values()].filter((s) => s.team === teamKey);
+  const mine = [...sessions.values()].filter((s) => s.team === teamKey && !s.ignored);
   const pick = mine.find((s) => s.status === 'ask') || mine.find((s) => s.status === 'done') || mine[0];
   if (pick) focusTty(pick.tty);
+}
+
+function focusSession(id) {
+  const s = typeof id === 'string' ? sessions.get(id) : null;
+  if (s) focusTty(s.tty);
 }
 
 function handleEvent(raw) {
@@ -211,6 +226,8 @@ function handleEvent(raw) {
   const status = statusByType[raw.type];
   const prev = sessions.get(id);
   const now = Date.now();
+  // Si la ignoraste, sigue oculta hasta que vuelvas a escribirle o te pida algo
+  const ignored = !!(prev && prev.ignored) && raw.type !== 'working' && raw.type !== 'ask';
 
   sessions.set(id, {
     id,
@@ -221,7 +238,10 @@ function handleEvent(raw) {
     status,
     since: prev && prev.status === status ? prev.since : now,
     seen: now,
+    ignored,
   });
+
+  if (ignored) { pushState(); return; }
 
   const shown = folder || (prev && prev.folder) || '';
   const base = { team: raw.team, color: team.color };
@@ -248,17 +268,46 @@ function tokenOk(header) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// Mientras el celular muestra el panda, el de escritorio se esconde solo.
+// Vuelve cuando el celular se desconecta, salvo que lo hayas escondido vos.
+let hiddenForPhone = false;
+function onPhoneViewers(count) {
+  if (!win || win.isDestroyed()) return;
+  if (count > 0 && win.isVisible()) {
+    win.hide();
+    hiddenForPhone = true;
+  } else if (count === 0 && hiddenForPhone) {
+    win.showInactive();
+    hiddenForPhone = false;
+  }
+  buildTrayMenu();
+}
+
+// El panda en el celular (ver phone-server.js): su propia clave, solo para mirar
+const phone = createPhone({
+  port: PORT,
+  token: loadPhoneToken(PANDA_DIR),
+  getState: fullState,
+  focusSession,
+  focusTeam: (key) => { if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key); },
+  onViewers: onPhoneViewers,
+  autoOpen: CONFIG.phoneAutoOpen,
+});
+
 function startServer() {
   const server = http.createServer((req, res) => {
     const deny = (code) => { res.writeHead(code); res.end(); };
 
-    // Los navegadores siempre mandan Origin en peticiones entre sitios:
-    // si viene, no es un hook, es una página web, y se rechaza.
-    if (req.headers.origin) return deny(403);
-
     // Solo se acepta si el Host es el de la propia máquina (anti DNS rebinding)
     const host = String(req.headers.host || '');
     if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return deny(403);
+
+    // Página del celular: tiene sus propias reglas y su propia clave
+    if (phone.handle(req, res)) return;
+
+    // Los navegadores siempre mandan Origin en peticiones entre sitios:
+    // si viene, no es un hook, es una página web, y se rechaza.
+    if (req.headers.origin) return deny(403);
 
     if (req.method !== 'POST' || req.url !== '/event') return deny(404);
     if (!tokenOk(req.headers['x-panda-token'])) return deny(401);
@@ -288,7 +337,8 @@ function menuTemplate() {
   return [
     {
       label: visible ? 'Ocultar el panda' : 'Mostrar el panda',
-      click: () => { if (win) { win.isVisible() ? win.hide() : win.showInactive(); buildTrayMenu(); } },
+      // A mano siempre gana: si lo mostrás con el celular conectado, queda a la vista
+      click: () => { if (win) { hiddenForPhone = false; win.isVisible() ? win.hide() : win.showInactive(); buildTrayMenu(); } },
     },
     {
       label: 'Los ojos siguen el cursor',
@@ -309,7 +359,18 @@ function menuTemplate() {
       click: (item) => { muted = item.checked; pushState(); },
     },
     { type: 'separator' },
-    { label: `Sesiones activas: ${sessions.size}`, enabled: false },
+    { label: `Sesiones activas: ${[...sessions.values()].filter((s) => !s.ignored).length}`, enabled: false },
+    {
+      label: 'Mostrar sesiones ignoradas',
+      enabled: [...sessions.values()].some((s) => s.ignored),
+      click: () => { for (const s of sessions.values()) s.ignored = false; pushState(); },
+    },
+    { type: 'separator' },
+    {
+      label: phone.devices().length ? 'Abrir el panda en el celular' : 'Celular: sin conectar por cable',
+      enabled: phone.devices().length > 0,
+      click: () => phone.openOnDevices(),
+    },
     { type: 'separator' },
     { label: 'Salir de Pandaemon', click: () => app.quit() },
   ];
@@ -334,7 +395,7 @@ function createTray() {
 
 /* ---------- IPC ---------- */
 
-ipcMain.handle('get-state', () => ({ teams: TEAMS, sessions: list(), muted, config: CONFIG }));
+ipcMain.handle('get-state', fullState);
 
 // Clic derecho sobre el panda: mismo menú que la bandeja
 ipcMain.on('context-menu', () => {
@@ -344,10 +405,25 @@ ipcMain.on('context-menu', () => {
 ipcMain.on('focus-team', (_e, key) => {
   if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key);
 });
-ipcMain.on('focus-session', (_e, id) => {
+// Clic derecho en una fila o un chip: ocultar hasta que haya novedades.
+// También se le saca la campanita a la pestaña de iTerm2.
+function ignore(list) {
+  for (const s of list) {
+    s.ignored = true;
+    if (IS_MAC && s.tty && RE_TTY.test(s.tty)) {
+      execFile(path.join(__dirname, 'bin', 'panda-tab'), [s.team], { env: { ...process.env, PANDA_TTY: s.tty } }, () => {});
+    }
+  }
+  if (list.length) pushState();
+}
+ipcMain.on('ignore-session', (_e, id) => {
   const s = typeof id === 'string' ? sessions.get(id) : null;
-  if (s) focusTty(s.tty);
+  if (s) ignore([s]);
 });
+ipcMain.on('ignore-team', (_e, key) => {
+  if (typeof key === 'string' && has(TEAMS, key)) ignore([...sessions.values()].filter((s) => s.team === key && !s.ignored));
+});
+ipcMain.on('focus-session', (_e, id) => focusSession(id));
 
 // La ventana se ajusta a su contenido y mantiene el borde inferior fijo
 ipcMain.on('resize', (_e, h) => {
@@ -391,6 +467,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   startServer();
+  phone.startUsb(buildTrayMenu);
   trackCursor();
   // Limpieza de sesiones abandonadas (terminal cerrada sin avisar)
   setInterval(() => {

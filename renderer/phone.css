@@ -1,0 +1,136 @@
+/* El panda en el celular (renderer/phone.js agrega la clase .phone).
+   Parado: globito, panda, equipos y la lista de sesiones abajo.
+   Acostado: el panda a la izquierda y la lista a la derecha. */
+
+html.phone, html.phone body {
+  background: radial-gradient(120% 80% at 50% 0%, #241f3d 0%, #14121f 60%);
+  background-color: #14121f;
+  touch-action: manipulation;
+}
+
+html.phone .stack {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas: "bubble" "panda" "counters" "panel";
+  justify-items: center;
+  align-items: start;
+  gap: 12px;
+}
+
+/* ---------- Panda y globito ---------- */
+html.phone .bubble   { grid-area: bubble; }
+html.phone .panda    { grid-area: panda; }
+html.phone .counters { grid-area: counters; }
+html.phone .panel    { grid-area: panel; }
+
+html.phone #pandaSvg { width: min(52vw, 26vh); height: auto; }
+
+/* El globito tiene su lugar reservado: cuando aparece no empuja nada */
+html.phone .bubble {
+  min-height: 24px;
+  max-width: min(92vw, 420px);
+  margin: 0;
+  padding: 10px 16px;
+  font-size: 15px;
+  border-radius: 14px;
+}
+html.phone .bubble.hidden { display: flex; visibility: hidden; }
+
+/* ---------- Equipos ---------- */
+html.phone .counters { max-width: none; margin: 0; gap: 8px; min-height: 32px; }
+html.phone .counters:empty { display: block; }
+html.phone .chip { height: 32px; padding: 0 6px 0 12px; gap: 8px; font-size: 14px; border-radius: 16px; }
+html.phone .chip .dot { width: 9px; height: 9px; }
+html.phone .chip .count { min-width: 22px; height: 22px; line-height: 22px; border-radius: 11px; font-size: 13px; }
+
+/* ---------- Sesiones: siempre a la vista ---------- */
+html.phone .panel {
+  width: 100%;
+  max-width: 640px;
+  height: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  opacity: 1;
+  transform: none;
+}
+html.phone .panel-head { padding: 16px 18px 10px; gap: 12px; }
+html.phone .panel-title { font-size: 12px; }
+html.phone .panel-meta { font-size: 13px; text-align: right; }
+
+html.phone .rows {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+  padding: 0 8px 10px;
+  gap: 4px;
+}
+html.phone .row {
+  grid-template-columns: 10px 1fr auto;
+  column-gap: 14px;
+  min-height: 60px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+html.phone .row:active { background: rgba(255, 255, 255, 0.10); }
+html.phone .row:hover  { background: rgba(255, 255, 255, 0.035); }
+html.phone .row.ask    { background: rgba(255, 176, 46, 0.08); box-shadow: inset 3px 0 0 var(--warn); }
+html.phone .row .dot   { width: 10px; height: 10px; }
+html.phone .row .name  { font-size: 17px; }
+html.phone .row .team  { margin-top: 3px; font-size: 13px; }
+html.phone .row .side  { gap: 5px; }
+html.phone .pill       { padding: 3px 10px; border-radius: 10px; font-size: 12px; }
+html.phone .row .ago   { font-size: 12px; }
+
+html.phone .empty {
+  padding: 28px 16px;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: center;
+}
+
+/* ---------- Acostado: panda a la izquierda, lista a la derecha ---------- */
+@media (orientation: landscape) {
+  html.phone .stack {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-rows: 1fr auto auto auto 1fr;
+    grid-template-areas:
+      ".        panel"
+      "bubble   panel"
+      "panda    panel"
+      "counters panel"
+      ".        panel";
+    column-gap: 20px;
+    row-gap: 10px;
+  }
+  html.phone #pandaSvg { width: min(22vw, 34vh); }
+  html.phone .panel { max-width: none; }
+  html.phone .bubble { padding: 8px 14px; font-size: 14px; max-width: 100%; }
+  html.phone .counters { gap: 6px; }
+  html.phone .chip { height: 28px; padding: 0 5px 0 10px; gap: 6px; font-size: 13px; }
+  html.phone .chip .count { min-width: 20px; height: 20px; line-height: 20px; font-size: 12px; }
+  html.phone .row { min-height: 54px; padding: 8px 12px; }
+}
+
+/* ---------- Sin conexión ---------- */
+#phoneStatus {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  top: max(10px, env(safe-area-inset-top));
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity .3s ease;
+  pointer-events: none;
+}
+body.offline #phoneStatus { opacity: 1; }
+body.offline .panda { opacity: .45; filter: grayscale(.7); }

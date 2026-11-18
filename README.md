@@ -3,7 +3,7 @@
 A tiny desktop panda that keeps an eye on your Claude Code sessions.
 
 - **Reacts to what Claude is doing:** sips coffee while it works, cheers when a session finishes, looks curious when it needs you, gets worried if you leave it waiting, and falls asleep when nothing happens.
-- **Session panel:** click the panda to see every session with its team color, project, status and how long it has been in that state. Click a row to jump to that iTerm2 tab.
+- **Session panel:** click the panda to see every session with its team color, project, status and how long it has been in that state. Click a row to jump to that iTerm2 tab. Right-click a row (or a team chip) to ignore it: it disappears, its tab loses the bell, and it only comes back when you type in that session again or it asks you for something. The tray menu can bring back every ignored session.
 - **Team counters:** colored chips show how many sessions are waiting for you, per team.
 - **Tab titles and colors:** every iTerm2 tab gets its team's title and color, so you never lose track of six terminals.
 - **Polished details:** the eyes follow your cursor across the whole screen, it blinks, wakes up with a stretch, remembers where you left it, and never steals focus from your terminal.
@@ -54,6 +54,7 @@ You can delete, add or rename teams. Restart Pandaemon after editing the file.
 | `followCursor` | `true` | The panda's eyes follow the mouse. Can also be toggled at runtime from the tray menu or by right-clicking the panda |
 | `sleepMinutes` | `10` | Minutes without activity before the panda falls asleep |
 | `escalateMinutes` | `5` | Minutes a session can wait for you before the panda gets worried |
+| `phoneAutoOpen` | `true` | When an Android phone is plugged in over USB, the panda moves to it on its own (see below) |
 
 ## Usage
 
@@ -64,6 +65,16 @@ You can delete, add or rename teams. Restart Pandaemon after editing the file.
 The first time you jump to a tab, macOS asks for automation permission to control iTerm2. Accept it.
 
 Drag the panda by its body to move it. Click it to open or close the session panel. Use the menu bar icon to mute notifications or quit.
+
+## The panda on your phone (Android, USB)
+
+Plug an Android phone into the computer and the same panda shows up full screen on it: it reacts the same way, shows the team chips and the session panel, and tapping a session jumps to that iTerm2 tab on the computer.
+
+1. Once: enable **USB debugging** on the phone (Settings → About phone → tap "Build number" 7 times, then Developer options → USB debugging) and install `adb` on the computer (`brew install --cask android-platform-tools`).
+2. Start Pandaemon from a terminal (`npm start`) so it can find `adb`, plug in the phone and accept "Allow USB debugging?".
+3. The panda moves to the phone on its own: the page opens in the phone's browser and the desktop panda hides. Unplug the phone (or leave the page) and the panda comes back to the desktop. You can also open it from the menu bar icon → **Abrir el panda en el celular**, and turn the automatic move off with `phoneAutoOpen: false`.
+
+Pandaemon sets up `adb reverse` by itself every time you plug the phone in. The server still listens only on `127.0.0.1`: the phone reaches it through the USB cable, never through the network. The phone uses its own key (`~/.panda/phone-token`), separate from the hooks token. With it, the phone can see the sessions and jump to a tab, but it cannot send events. The key travels to the phone over the cable and is not left in the address bar. Since the page is served from `localhost`, the browser keeps the screen on.
 
 ## See the panda without hooks
 
