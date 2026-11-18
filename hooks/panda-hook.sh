@@ -34,7 +34,20 @@ esac
 
 SESSION="$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)"
 MESSAGE="$(echo "$INPUT" | jq -r '.message // empty' 2>/dev/null)"
+NOTIF_TYPE="$(echo "$INPUT" | jq -r '.notification_type // empty' 2>/dev/null)"
 [ -z "$SESSION" ] && SESSION="$PPID"
+
+# Claude Code también manda Notification cuando la sesión lleva un rato quieta
+# ("Claude is waiting for your input"). Eso no es que te necesite: ya terminó.
+# Solo cuentan los permisos y las preguntas reales.
+if [ "$TYPE" = "ask" ]; then
+  case "$NOTIF_TYPE" in
+    idle_prompt|auth_success) exit 0 ;;
+  esac
+  case "$MESSAGE" in
+    *"waiting for your input"*) exit 0 ;;
+  esac
+fi
 
 # El hook corre sin terminal propia: busca la de Claude Code subiendo
 # por los procesos padre hasta encontrar uno con tty (ttysNNN).

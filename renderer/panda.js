@@ -202,7 +202,7 @@ function renderCounters() {
     const chip = document.createElement('button');
     chip.className = 'chip' + (mine.some((s) => s.status === 'ask') ? ' ask' : '');
     chip.style.setProperty('--team', safeColor(t.color));
-    chip.title = `${t.name}: ${mine.length} sesión(es)`;
+    chip.title = `${t.name}: ${mine.length} sesión(es) · clic derecho para ignorar`;
     const dot = document.createElement('span');
     dot.className = 'dot';
     const label = document.createElement('span');
@@ -212,6 +212,7 @@ function renderCounters() {
     count.textContent = pending ? String(pending) : '···';
     chip.append(dot, label, count);
     chip.addEventListener('click', () => bridge && bridge.focusTeam(key));
+    chip.addEventListener('contextmenu', (e) => { e.preventDefault(); if (bridge) bridge.ignoreTeam(key); });
     els.counters.appendChild(chip);
   }
 }
@@ -245,7 +246,9 @@ function renderPanel() {
     when.textContent = ago(s.since);
     side.append(pill, when);
     row.append(dot, main, side);
+    row.title = 'Clic: ir a la pestaña · clic derecho: ignorar hasta que haya novedades';
     row.addEventListener('click', () => bridge && bridge.focusSession(s.id));
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); if (bridge) bridge.ignoreSession(s.id); });
     els.rows.appendChild(row);
   }
 }
@@ -270,7 +273,8 @@ const togglePanel = () => {
 /* ---------- Mensajes de la app ---------- */
 
 function onState(msg) {
-  sessions = Array.isArray(msg.sessions) ? msg.sessions : [];
+  // Las ignoradas no cuentan para nada: ni chips, ni panel, ni la cara del panda
+  sessions = (Array.isArray(msg.sessions) ? msg.sessions : []).filter((s) => !s.ignored);
   muted = !!msg.muted;
   renderCounters();
   if (panelOpen && !sessions.length) closePanel();

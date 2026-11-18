@@ -59,7 +59,9 @@ function clean(str, max) {
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
-// sessions: id -> { id, team, cwd, folder, status, tty, since, seen }
+// sessions: id -> { id, team, cwd, folder, status, tty, since, seen, ignored }
+// ignored: la ocultaste con clic derecho. Vuelve a aparecer cuando le escribís
+// (working) o cuando te pide algo (ask).
 const sessions = new Map();
 let win = null;
 let tray = null;
@@ -129,7 +131,7 @@ function createWindow() {
 
 function list() {
   return [...sessions.values()].map((s) => ({
-    id: s.id, team: s.team, folder: s.folder, status: s.status, since: s.since,
+    id: s.id, team: s.team, folder: s.folder, status: s.status, since: s.since, ignored: !!s.ignored,
   }));
 }
 
@@ -177,7 +179,7 @@ function focusTty(tty) {
 }
 
 function focusTeam(teamKey) {
-  const mine = [...sessions.values()].filter((s) => s.team === teamKey);
+  const mine = [...sessions.values()].filter((s) => s.team === teamKey && !s.ignored);
   const pick = mine.find((s) => s.status === 'ask') || mine.find((s) => s.status === 'done') || mine[0];
   if (pick) focusTty(pick.tty);
 }
@@ -211,6 +213,8 @@ function handleEvent(raw) {
   const status = statusByType[raw.type];
   const prev = sessions.get(id);
   const now = Date.now();
+  // Si la ignoraste, sigue oculta hasta que vuelvas a escribirle o te pida algo
+  const ignored = !!(prev && prev.ignored) && raw.type !== 'working' && raw.type !== 'ask';
 
   sessions.set(id, {
     id,
@@ -221,7 +225,10 @@ function handleEvent(raw) {
     status,
     since: prev && prev.status === status ? prev.since : now,
     seen: now,
+    ignored,
   });
+
+  if (ignored) { pushState(); return; }
 
   const shown = folder || (prev && prev.folder) || '';
   const base = { team: raw.team, color: team.color };
@@ -309,7 +316,12 @@ function menuTemplate() {
       click: (item) => { muted = item.checked; pushState(); },
     },
     { type: 'separator' },
-    { label: `Sesiones activas: ${sessions.size}`, enabled: false },
+    { label: `Sesiones activas: ${[...sessions.values()].filter((s) => !s.ignored).length}`, enabled: false },
+    {
+      label: 'Mostrar sesiones ignoradas',
+      enabled: [...sessions.values()].some((s) => s.ignored),
+      click: () => { for (const s of sessions.values()) s.ignored = false; pushState(); },
+    },
     { type: 'separator' },
     { label: 'Salir de Pandaemon', click: () => app.quit() },
   ];
@@ -343,6 +355,24 @@ ipcMain.on('context-menu', () => {
 
 ipcMain.on('focus-team', (_e, key) => {
   if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key);
+});
+// Clic derecho en una fila o un chip: ocultar hasta que haya novedades.
+// También se le saca la campanita a la pestaña de iTerm2.
+function ignore(list) {
+  for (const s of list) {
+    s.ignored = true;
+    if (IS_MAC && s.tty && RE_TTY.test(s.tty)) {
+      execFile(path.join(__dirname, 'bin', 'panda-tab'), [s.team], { env: { ...process.env, PANDA_TTY: s.tty } }, () => {});
+    }
+  }
+  if (list.length) pushState();
+}
+ipcMain.on('ignore-session', (_e, id) => {
+  const s = typeof id === 'string' ? sessions.get(id) : null;
+  if (s) ignore([s]);
+});
+ipcMain.on('ignore-team', (_e, key) => {
+  if (typeof key === 'string' && has(TEAMS, key)) ignore([...sessions.values()].filter((s) => s.team === key && !s.ignored));
 });
 ipcMain.on('focus-session', (_e, id) => {
   const s = typeof id === 'string' ? sessions.get(id) : null;

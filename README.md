@@ -3,7 +3,7 @@
 A tiny desktop panda that keeps an eye on your Claude Code sessions.
 
 - **Reacts to what Claude is doing:** sips coffee while it works, cheers when a session finishes, looks curious when it needs you, gets worried if you leave it waiting, and falls asleep when nothing happens.
-- **Session panel:** click the panda to see every session with its team color, project, status and how long it has been in that state. Click a row to jump to that iTerm2 tab.
+- **Session panel:** click the panda to see every session with its team color, project, status and how long it has been in that state. Click a row to jump to that iTerm2 tab. Right-click a row (or a team chip) to ignore it: it disappears, its tab loses the bell, and it only comes back when you type in that session again or it asks you for something. The tray menu can bring back every ignored session.
 - **Team counters:** colored chips show how many sessions are waiting for you, per team.
 - **Tab titles and colors:** every iTerm2 tab gets its team's title and color, so you never lose track of six terminals.
 - **Polished details:** the eyes follow your cursor across the whole screen, it blinks, wakes up with a stretch, remembers where you left it, and never steals focus from your terminal.
