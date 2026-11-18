@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { createPhone, loadPhoneToken } = require('./phone-server');
 
 const PORT = 47800;
 const MAX_SESSIONS = 200;
@@ -135,8 +136,14 @@ function list() {
   }));
 }
 
+function fullState() {
+  return { teams: TEAMS, sessions: list(), muted, config: CONFIG };
+}
+
 function pushState(extra = {}) {
-  if (win && !win.isDestroyed()) win.webContents.send('panda-state', { sessions: list(), muted, ...extra });
+  const data = { sessions: list(), muted, ...extra };
+  if (win && !win.isDestroyed()) win.webContents.send('panda-state', data);
+  phone.broadcast(data);
   buildTrayMenu();
 }
 
@@ -182,6 +189,11 @@ function focusTeam(teamKey) {
   const mine = [...sessions.values()].filter((s) => s.team === teamKey && !s.ignored);
   const pick = mine.find((s) => s.status === 'ask') || mine.find((s) => s.status === 'done') || mine[0];
   if (pick) focusTty(pick.tty);
+}
+
+function focusSession(id) {
+  const s = typeof id === 'string' ? sessions.get(id) : null;
+  if (s) focusTty(s.tty);
 }
 
 function handleEvent(raw) {
@@ -255,17 +267,45 @@ function tokenOk(header) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// Mientras el celular muestra el panda, el de escritorio se esconde solo.
+// Vuelve cuando el celular se desconecta, salvo que lo hayas escondido vos.
+let hiddenForPhone = false;
+function onPhoneViewers(count) {
+  if (!win || win.isDestroyed()) return;
+  if (count > 0 && win.isVisible()) {
+    win.hide();
+    hiddenForPhone = true;
+  } else if (count === 0 && hiddenForPhone) {
+    win.showInactive();
+    hiddenForPhone = false;
+  }
+  buildTrayMenu();
+}
+
+// El panda en el celular (ver phone-server.js): su propia clave, solo para mirar
+const phone = createPhone({
+  port: PORT,
+  token: loadPhoneToken(PANDA_DIR),
+  getState: fullState,
+  focusSession,
+  focusTeam: (key) => { if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key); },
+  onViewers: onPhoneViewers,
+});
+
 function startServer() {
   const server = http.createServer((req, res) => {
     const deny = (code) => { res.writeHead(code); res.end(); };
 
-    // Los navegadores siempre mandan Origin en peticiones entre sitios:
-    // si viene, no es un hook, es una página web, y se rechaza.
-    if (req.headers.origin) return deny(403);
-
     // Solo se acepta si el Host es el de la propia máquina (anti DNS rebinding)
     const host = String(req.headers.host || '');
     if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return deny(403);
+
+    // Página del celular: tiene sus propias reglas y su propia clave
+    if (phone.handle(req, res)) return;
+
+    // Los navegadores siempre mandan Origin en peticiones entre sitios:
+    // si viene, no es un hook, es una página web, y se rechaza.
+    if (req.headers.origin) return deny(403);
 
     if (req.method !== 'POST' || req.url !== '/event') return deny(404);
     if (!tokenOk(req.headers['x-panda-token'])) return deny(401);
@@ -295,7 +335,8 @@ function menuTemplate() {
   return [
     {
       label: visible ? 'Ocultar el panda' : 'Mostrar el panda',
-      click: () => { if (win) { win.isVisible() ? win.hide() : win.showInactive(); buildTrayMenu(); } },
+      // A mano siempre gana: si lo mostrás con el celular conectado, queda a la vista
+      click: () => { if (win) { hiddenForPhone = false; win.isVisible() ? win.hide() : win.showInactive(); buildTrayMenu(); } },
     },
     {
       label: 'Los ojos siguen el cursor',
@@ -323,6 +364,12 @@ function menuTemplate() {
       click: () => { for (const s of sessions.values()) s.ignored = false; pushState(); },
     },
     { type: 'separator' },
+    {
+      label: phone.devices().length ? 'Abrir el panda en el celular' : 'Celular: sin conectar por cable',
+      enabled: phone.devices().length > 0,
+      click: () => phone.openOnDevices(),
+    },
+    { type: 'separator' },
     { label: 'Salir de Pandaemon', click: () => app.quit() },
   ];
 }
@@ -346,7 +393,7 @@ function createTray() {
 
 /* ---------- IPC ---------- */
 
-ipcMain.handle('get-state', () => ({ teams: TEAMS, sessions: list(), muted, config: CONFIG }));
+ipcMain.handle('get-state', fullState);
 
 // Clic derecho sobre el panda: mismo menú que la bandeja
 ipcMain.on('context-menu', () => {
@@ -374,10 +421,7 @@ ipcMain.on('ignore-session', (_e, id) => {
 ipcMain.on('ignore-team', (_e, key) => {
   if (typeof key === 'string' && has(TEAMS, key)) ignore([...sessions.values()].filter((s) => s.team === key && !s.ignored));
 });
-ipcMain.on('focus-session', (_e, id) => {
-  const s = typeof id === 'string' ? sessions.get(id) : null;
-  if (s) focusTty(s.tty);
-});
+ipcMain.on('focus-session', (_e, id) => focusSession(id));
 
 // La ventana se ajusta a su contenido y mantiene el borde inferior fijo
 ipcMain.on('resize', (_e, h) => {
@@ -421,6 +465,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   startServer();
+  phone.startUsb(buildTrayMenu);
   trackCursor();
   // Limpieza de sesiones abandonadas (terminal cerrada sin avisar)
   setInterval(() => {

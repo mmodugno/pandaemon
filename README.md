@@ -65,6 +65,16 @@ The first time you jump to a tab, macOS asks for automation permission to contro
 
 Drag the panda by its body to move it. Click it to open or close the session panel. Use the menu bar icon to mute notifications or quit.
 
+## The panda on your phone (Android, USB)
+
+Plug an Android phone into the computer and the same panda shows up full screen on it: it reacts the same way, shows the team chips and the session panel, and tapping a session jumps to that iTerm2 tab on the computer.
+
+1. Once: enable **USB debugging** on the phone (Settings → About phone → tap "Build number" 7 times, then Developer options → USB debugging) and install `adb` on the computer (`brew install --cask android-platform-tools`).
+2. Start Pandaemon from a terminal (`npm start`) so it can find `adb`, plug in the phone and accept "Allow USB debugging?".
+3. Menu bar icon → **Abrir el panda en el celular**. The page opens in the phone's browser; add it to the home screen to open it full screen next time.
+
+Pandaemon sets up `adb reverse` by itself every time you plug the phone in. The server still listens only on `127.0.0.1`: the phone reaches it through the USB cable, never through the network. The phone uses its own key (`~/.panda/phone-token`), separate from the hooks token. With it, the phone can see the sessions and jump to a tab, but it cannot send events. The key travels to the phone over the cable and is not left in the address bar. Since the page is served from `localhost`, the browser keeps the screen on.
+
 ## See the panda without hooks
 
 With Pandaemon running:

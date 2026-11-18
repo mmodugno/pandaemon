@@ -10,6 +10,8 @@ const OUT = '#2f2b4d';
 const EYE_L = [53, 82];
 const EYE_R = [107, 82];
 const bridge = window.panda || null;
+// En el celular el panel de sesiones queda siempre a la vista
+const ALWAYS_OPEN = !!(bridge && bridge.alwaysOpen);
 
 let TEAMS = {};
 let CONFIG = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5 };
@@ -217,9 +219,29 @@ function renderCounters() {
   }
 }
 
+// Resumen por estado: "2 te necesitan · 3 trabajando · 1 lista"
+function summary() {
+  const n = (st) => sessions.filter((s) => s.status === st).length;
+  const parts = [];
+  const ask = n('ask'), working = n('working'), done = n('done'), idle = n('idle');
+  if (ask) parts.push(`${ask} te necesita${ask === 1 ? '' : 'n'}`);
+  if (working) parts.push(`${working} trabajando`);
+  if (done) parts.push(`${done} lista${done === 1 ? '' : 's'}`);
+  if (idle) parts.push(`${idle} inactiva${idle === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
 function renderPanel() {
-  els.panelMeta.textContent = (sessions.length ? `${sessions.length} activa${sessions.length === 1 ? '' : 's'}` : '') + (muted ? ' · silenciado' : '');
+  els.panelMeta.textContent = ALWAYS_OPEN
+    ? (summary() || 'Sin sesiones') + (muted ? ' · silenciado' : '')
+    : (sessions.length ? `${sessions.length} activa${sessions.length === 1 ? '' : 's'}` : '') + (muted ? ' · silenciado' : '');
   els.rows.textContent = '';
+  if (ALWAYS_OPEN && !sessions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'Cuando abras Claude Code, tus sesiones aparecen acá.';
+    els.rows.appendChild(empty);
+  }
   const sorted = [...sessions].sort((a, b) => (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]) || (a.since - b.since));
   for (const s of sorted) {
     const t = teamOf(s.team);
@@ -266,6 +288,7 @@ function closePanel() {
 }
 // Sin sesiones no hay nada que mostrar: el panda queda solo
 const togglePanel = () => {
+  if (ALWAYS_OPEN) return;
   if (panelOpen) closePanel();
   else if (sessions.length) openPanel();
 };
@@ -273,11 +296,14 @@ const togglePanel = () => {
 /* ---------- Mensajes de la app ---------- */
 
 function onState(msg) {
+  // En el celular los equipos y ajustes también llegan con el estado (por si se reconecta)
+  if (msg.teams && typeof msg.teams === 'object') TEAMS = msg.teams;
+  if (msg.config && typeof msg.config === 'object') CONFIG = { ...CONFIG, ...msg.config };
   // Las ignoradas no cuentan para nada: ni chips, ni panel, ni la cara del panda
   sessions = (Array.isArray(msg.sessions) ? msg.sessions : []).filter((s) => !s.ignored);
   muted = !!msg.muted;
   renderCounters();
-  if (panelOpen && !sessions.length) closePanel();
+  if (panelOpen && !sessions.length && !ALWAYS_OPEN) closePanel();
   else if (panelOpen) renderPanel();
 
   if (msg.reaction) {
@@ -359,6 +385,7 @@ async function init() {
     new ResizeObserver(() => bridge.resize(Math.ceil(els.stack.getBoundingClientRect().height) + 10)).observe(els.stack);
   }
   setState('calm');
+  if (ALWAYS_OPEN) openPanel();
 }
 
 init();

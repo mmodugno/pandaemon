@@ -1,0 +1,11 @@
+{
+  "name": "Pandaemon",
+  "short_name": "Pandaemon",
+  "start_url": "/phone/",
+  "scope": "/phone/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#14121f",
+  "theme_color": "#14121f",
+  "icons": [{ "src": "phone-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
