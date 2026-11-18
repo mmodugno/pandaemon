@@ -54,6 +54,7 @@ You can delete, add or rename teams. Restart Pandaemon after editing the file.
 | `followCursor` | `true` | The panda's eyes follow the mouse. Can also be toggled at runtime from the tray menu or by right-clicking the panda |
 | `sleepMinutes` | `10` | Minutes without activity before the panda falls asleep |
 | `escalateMinutes` | `5` | Minutes a session can wait for you before the panda gets worried |
+| `phoneAutoOpen` | `true` | When an Android phone is plugged in over USB, the panda moves to it on its own (see below) |
 
 ## Usage
 
@@ -71,7 +72,7 @@ Plug an Android phone into the computer and the same panda shows up full screen 
 
 1. Once: enable **USB debugging** on the phone (Settings → About phone → tap "Build number" 7 times, then Developer options → USB debugging) and install `adb` on the computer (`brew install --cask android-platform-tools`).
 2. Start Pandaemon from a terminal (`npm start`) so it can find `adb`, plug in the phone and accept "Allow USB debugging?".
-3. Menu bar icon → **Abrir el panda en el celular**. The page opens in the phone's browser; add it to the home screen to open it full screen next time.
+3. The panda moves to the phone on its own: the page opens in the phone's browser and the desktop panda hides. Unplug the phone (or leave the page) and the panda comes back to the desktop. You can also open it from the menu bar icon → **Abrir el panda en el celular**, and turn the automatic move off with `phoneAutoOpen: false`.
 
 Pandaemon sets up `adb reverse` by itself every time you plug the phone in. The server still listens only on `127.0.0.1`: the phone reaches it through the USB cable, never through the network. The phone uses its own key (`~/.panda/phone-token`), separate from the hooks token. With it, the phone can see the sessions and jump to a tab, but it cannot send events. The key travels to the phone over the cable and is not left in the address bar. Since the page is served from `localhost`, the browser keeps the screen on.
 

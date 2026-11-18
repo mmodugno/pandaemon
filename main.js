@@ -36,11 +36,12 @@ try {
 
 // Ajustes en pandaemon.config.json, validados
 function loadConfig() {
-  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5, followCursor: true };
+  const cfg = { style: 'classic', sleepMinutes: 10, escalateMinutes: 5, followCursor: true, phoneAutoOpen: true };
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'pandaemon.config.json'), 'utf8'));
     if (raw.style === 'soft' || raw.style === 'classic') cfg.style = raw.style;
     if (typeof raw.followCursor === 'boolean') cfg.followCursor = raw.followCursor;
+    if (typeof raw.phoneAutoOpen === 'boolean') cfg.phoneAutoOpen = raw.phoneAutoOpen;
     if (Number.isFinite(raw.sleepMinutes)) cfg.sleepMinutes = Math.min(240, Math.max(1, raw.sleepMinutes));
     if (Number.isFinite(raw.escalateMinutes)) cfg.escalateMinutes = Math.min(120, Math.max(1, raw.escalateMinutes));
   } catch (e) { /* se usan los valores por defecto */ }
@@ -290,6 +291,7 @@ const phone = createPhone({
   focusSession,
   focusTeam: (key) => { if (typeof key === 'string' && has(TEAMS, key)) focusTeam(key); },
   onViewers: onPhoneViewers,
+  autoOpen: CONFIG.phoneAutoOpen,
 });
 
 function startServer() {

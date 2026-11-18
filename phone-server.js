@@ -25,6 +25,7 @@ const FILES = {
 const CSP = "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'";
 const MAX_CLIENTS = 4;
 const MAX_BODY = 2000;
+const AUTO_OPEN_WAIT_MS = 5000;
 const RE_SERIAL = /^[A-Za-z0-9._:-]{1,64}$/;
 const RE_TOKEN = /^[0-9a-f]{64}$/;
 
@@ -77,7 +78,7 @@ function phonePage() {
   return out;
 }
 
-function createPhone({ port, token, getState, focusSession, focusTeam, onViewers = () => {}, log = console.log }) {
+function createPhone({ port, token, getState, focusSession, focusTeam, onViewers = () => {}, autoOpen = true, log = console.log }) {
   const selfOrigins = new Set([`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
   const clients = new Set();
 
@@ -231,6 +232,16 @@ function createPhone({ port, token, getState, focusSession, focusTeam, onViewers
       for (const s of [...bridged]) {
         if (!now.has(s)) { bridged.delete(s); onChange(); }
       }
+      // Si adb se reinició, el puente se pierde aunque el celular siga enchufado:
+      // se comprueba en cada vuelta y, si falta, se vuelve a armar.
+      for (const s of bridged) {
+        if (!now.has(s) || pending.has(s)) continue;
+        adb(['-s', s, 'reverse', '--list'], (e, list) => {
+          if (e || String(list).includes(`tcp:${port}`) || pending.has(s)) return;
+          pending.add(s);
+          adb(['-s', s, 'reverse', `tcp:${port}`, `tcp:${port}`], () => pending.delete(s));
+        });
+      }
       for (const s of now) {
         if (bridged.has(s) || pending.has(s)) continue;
         pending.add(s);
@@ -240,6 +251,11 @@ function createPhone({ port, token, getState, focusSession, focusTeam, onViewers
           bridged.add(s);
           log(`[celular] Conectado por cable: ${s}`);
           onChange();
+          // Al enchufarlo, el panda se muda al celular. Antes espera un poco:
+          // si la página ya estaba abierta, se reconecta sola y no hace falta abrirla.
+          if (autoOpen) {
+            setTimeout(() => { if (bridged.has(s) && clients.size === 0) openOn(s); }, AUTO_OPEN_WAIT_MS);
+          }
         });
       }
     });
@@ -252,13 +268,14 @@ function createPhone({ port, token, getState, focusSession, focusTeam, onViewers
   }
 
   // Abre la página en el navegador del celular con la clave: viaja solo por el cable
-  function openOnDevices() {
+  function openOn(serial) {
     const link = `http://localhost:${port}/phone/?k=${token}`;
-    for (const s of bridged) {
-      adb(['-s', s, 'shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `'${link}'`], (e) => {
-        if (e) log(`[celular] No pude abrir la página en ${s}: ${e.message}`);
-      });
-    }
+    adb(['-s', serial, 'shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `'${link}'`], (e) => {
+      if (e) log(`[celular] No pude abrir la página en ${serial}: ${e.message}`);
+    });
+  }
+  function openOnDevices() {
+    for (const s of bridged) openOn(s);
   }
 
   return { handle, broadcast, startUsb, openOnDevices, devices: () => [...bridged] };
